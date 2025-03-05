@@ -77,13 +77,20 @@ def extract_text_from_file(file_path: str) -> str:
 class CriteriaExtractionResponse(BaseModel):
     criteria: List[str]
 
+    class Config:
+        schema_extra = {
+            "example": {
+                "criteria": ["5+ years of experience in Python development", "Strong background in Machine Learning", "Excellent communication skills"]
+            }
+        }
+
 @app.get("/")
 async def hello() -> dict:
   return {"message": "Let's get started"}
 
 @app.post("/extract-criteria" , response_model=CriteriaExtractionResponse , summary="Extract Job Criteria",
-          description="Extracts key ranking criteria from an uploaded job description file (PDF or DOCX).")
-async def extract_criteria(file: UploadFile = File(..., description="Upload a PDF or DOCX file containing a job description.")) -> CriteriaExtractionResponse:
+          description="Extracts key ranking criteria from an uploaded job description file (PDF or DOCX).\n\n Sample Input : \n\n <uploaded_job_description.pdf> \n\n Sample output \n\n { \n\n'criteria':\n\n  ['5+ years of experience in Python development', 'Strong background in Machine Learning', 'Excellent communication skills'] \n\n}")
+async def extract_criteria(file: UploadFile = File(..., description="Upload a PDF or DOCX file containing a job description. \n\n Example: A file names Ai-engineer Job description")) -> CriteriaExtractionResponse:
     """This endpoint extracts the key criteria for a given job description using openAI's LLM . 
 
     Args:
@@ -148,9 +155,9 @@ async def extract_criteria(file: UploadFile = File(..., description="Upload a PD
     
 
 @app.post("/score-resumes", summary="Score Resumes",
-          description="Scores multiple resumes based on provided criteria and returns scores in a CSV format.")
-async def score_resumes(criteria: str = Form(..., description="input the criteria json extracted from the job description. "),
- files: List[UploadFile] = File(..., description="Upload the PDFs or DOCXs file containing the resume to be ranked.")) -> StreamingResponse:
+          description="Scores multiple resumes based on provided criteria and returns scores in a CSV format.\n\n Sample Input: \n\n{ \n\n \"criteria\":  \n\n [\"Criteria1\", \"Criteria2\",....] , \n\nfiles: \n\n[ '<uploaded_resume_1.pdf>'','<uploaded_resume_2.docx>',...] \n\n}  \n\n Example of expected CSV output:\n\n | Name | Criteria1 | Criteria2 | Total Score |\n\n | -------- | ---------- | --------- | --------- |\n\n | John      | 5    \t\t            | 4                | 9         |")
+async def score_resumes(criteria: str = Form(..., description="input the criteria json extracted from the job description. Example: '{\"criteria\": [\"Criteria1\", \"Criteria2\",....]}' "),
+ files: List[UploadFile] = File(..., description="Upload the PDFs or DOCXs file containing the resume to be ranked. The returned CSV file will be structured with columns for each criterion, plus additional columns for the candidate's name and total score.")) -> StreamingResponse:
   """This endpoint scores uploaded resumes based on the provided job criteria using OpenAI's LLM.
 
   Args:
