@@ -102,3 +102,6 @@ I welcome contributions to this project. If you would like to contribute, please
 5. Create a new Pull Request.
 6. Please make sure to update tests as appropriate.
 
+## License
+
+*MIT*
