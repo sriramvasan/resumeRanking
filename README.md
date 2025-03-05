@@ -27,7 +27,7 @@ This project provides two RESTful API endpoints using FastAPI that automate the 
 1. Clone the repository:
 
 ```https://github.com/sriramvasan/resumeRanking.git
-cd resume-ranking-api
+cd resumeRanking
 ```
 
 2. Install the required packages:
@@ -39,7 +39,7 @@ pip install -r requirements.txt
 3. Set up the environment variables:
 
 
-* Create a .env file in the project root directory.
+* Create a `.env` file in the project root directory.
 * Add `OPEN_AI_API=your_openai_api_key_here` to the file.
 
 ### Running the Application
@@ -61,12 +61,12 @@ After running the application, you can access the Swagger UI documentation at `h
 1. POST /extract-criteria
 
 * Description: Extracts key ranking criteria from a provided job description file.
-* Input: Multipart form-data with the key file containing the job description file.
+* Input: Multipart form-data with the key `file` containing the job description file.
 
 2. POST /score-resumes
 
 * Description: Scores resumes based on provided criteria and returns scores in a CSV format.
-* Input: Multipart form-data with the key criteria containing a JSON string of criteria and files containing multiple resume files.
+* Input: Multipart form-data with the key `criteria` containing a string of criteria and `files` containing multiple resume files.
 
 ## Usage
 
