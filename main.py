@@ -29,13 +29,16 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Clearing the files stored for processing 
 def clear_tempfiles(directory:str)-> None:
   """Deletes all the temporary files saved in the 
   """
+  # Checking if the directory exists
   if not os.path.exists(directory):
     print(f"Directory {directory} does not exist.")
     return
 
+  # goes through all the files in the directory
   files = glob.glob(os.path.join(directory, '*'))
   for file in files:
     try:
@@ -44,7 +47,13 @@ def clear_tempfiles(directory:str)-> None:
     except Exception as e:
       print(f"Error deleting {file}: {str(e)}")
 
-async def save_tempfile(file: UploadFile):
+# Saves the file temporarily to be processed or extracted
+async def save_tempfile(file: UploadFile) -> None:
+  """File is saved to extract or process it later
+
+  Args:
+      file (UploadFile): The file that needs to be saved in a temporary location
+  """
   if not os.path.exists("temp/"):
       os.mkdir('temp/')
   temp_file_path = f"temp/{file.filename}"
@@ -52,9 +61,16 @@ async def save_tempfile(file: UploadFile):
     f.write(await file.read())
 
 def extract_text_from_file(file_path: str) -> str:
-    """Extracts text from a given file."""
-    text = textract.process(file_path)
-    return text.decode('utf-8')
+  """Extracts text from a given file.
+
+  Args:
+      file_path (str): The file path for the file which needs to be extracted
+
+  Returns:
+      str: Returns the extracted texts from the file 
+  """
+  text = textract.process(file_path)
+  return text.decode('utf-8')
 
 class CriteriaExtractionResponse(BaseModel):
     criteria: List[str]
@@ -62,7 +78,7 @@ class CriteriaExtractionResponse(BaseModel):
 @app.post("/extract-criteria" , response_model=CriteriaExtractionResponse , summary="Extract Job Criteria",
           description="Extracts key ranking criteria from an uploaded job description file (PDF or DOCX)." )
 async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionResponse:
-    """This endpoint generates the key criteria for a job description. 
+    """This endpoint extracts the key criteria for a given job description using openAI's LLM . 
 
     Args:
         file (UploadFile): A PDF file containing the description of a job.
@@ -80,6 +96,7 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
     # Helps to extract text from the file
     extracted_text = extract_text_from_file(temp_file_path)
 
+    # openai-response
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -124,18 +141,13 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
     return CriteriaExtractionResponse.parse_raw(criteria)
     
 
-class ResumeScoringRequest(BaseModel):
-    criteria: List[str]
-    files: List[UploadFile]
-
-
 @app.post("/score-resumes", summary="Score Resumes",
           description="Scores multiple resumes based on provided criteria and returns scores in a CSV format.")
 async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(...)) -> StreamingResponse:
   """This endpoint scores uploaded resumes based on the provided job criteria using OpenAI's LLM.
 
   Args:
-      request (ResumeScoringRequest): Contains the list of criteria and uploaded resume files.
+      request (criteria , files): Contains the list of criteria and uploaded resume files.
 
   Returns:
       StreamingResponse: A CSV file containing the scores for each candidate.
@@ -194,7 +206,7 @@ async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(.
             }
           }
         },
-        temperature=0.5,
+        temperature=0,
         max_completion_tokens=250,
         top_p=1,
         frequency_penalty=0,
@@ -202,8 +214,6 @@ async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(.
 
     res = response.choices[0].message.content
     res = json.loads(res)
-    # res = dict(res)
-    # print(res, type(res), res.keys(), res.values(), res['scores'])
 
     if len(criteria.criteria) != len(res['scores']):
       raise ValueError("The number of criteria must match the number of scores")
@@ -228,7 +238,7 @@ async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(.
   # Create a CSV from the DataFrame
   stream = io.StringIO()
   df.to_csv(stream, index=False)
-  stream.seek(0)  # Go back to the start of the StringIO object
+  stream.seek(0)  
 
   clear_tempfiles('temp/')
   return StreamingResponse(stream, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=scores.csv"})
