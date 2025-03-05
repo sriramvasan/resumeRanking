@@ -8,14 +8,16 @@ import json
 import os 
 from dotenv import load_dotenv
 from pydantic import BaseModel , validator
-from IPython.display import display , Markdown
 import pandas as pd
 import io
 import glob
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(
+  title="Resume Ranking API",
+    description="Helps you upload a job description and rank resumes according to the job description's important Criteria"
+)
 # OpenAI API Key setup
 api_key = os.getenv("OPEN_AI_API")
 client = OpenAI(api_key = api_key)
@@ -75,9 +77,13 @@ def extract_text_from_file(file_path: str) -> str:
 class CriteriaExtractionResponse(BaseModel):
     criteria: List[str]
 
+@app.get("/")
+async def hello() -> dict:
+  return {"message": "Let's get started"}
+
 @app.post("/extract-criteria" , response_model=CriteriaExtractionResponse , summary="Extract Job Criteria",
-          description="Extracts key ranking criteria from an uploaded job description file (PDF or DOCX)." )
-async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionResponse:
+          description="Extracts key ranking criteria from an uploaded job description file (PDF or DOCX).")
+async def extract_criteria(file: UploadFile = File(..., description="Upload a PDF or DOCX file containing a job description.")) -> CriteriaExtractionResponse:
     """This endpoint extracts the key criteria for a given job description using openAI's LLM . 
 
     Args:
@@ -143,7 +149,8 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
 
 @app.post("/score-resumes", summary="Score Resumes",
           description="Scores multiple resumes based on provided criteria and returns scores in a CSV format.")
-async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(...)) -> StreamingResponse:
+async def score_resumes(criteria: str = Form(..., description="input the criteria json extracted from the job description. "),
+ files: List[UploadFile] = File(..., description="Upload the PDFs or DOCXs file containing the resume to be ranked.")) -> StreamingResponse:
   """This endpoint scores uploaded resumes based on the provided job criteria using OpenAI's LLM.
 
   Args:
