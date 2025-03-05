@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Body , Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
@@ -63,7 +63,7 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
         model="gpt-4o",
         messages=[
             {"role": "system","content": "You are an experienced Hiring Manager. For the given Job description, look for the necessary criteria that is crucial for the role."},
-            {"role": "user", "content": f"Extract key ranking criteria from the following job description: {extracted_text}, do not separate into multiple categories, return the json as a list of criterias. Make the criterias short, 2-3 words"}
+            {"role": "user", "content": f"Extract key ranking criteria such as skills, certifications, experience, and qualifications from the following job description: {extracted_text}, do not separate into multiple categories, return the json as a list of criterias. Make the criterias short, 2-3 words"}
         ],
         
         response_format={
@@ -106,9 +106,9 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
     # criteria_storage[session_id] = criteria_dict
     # return {"session_id": session_id, "criteria": criteria_dict}
 
-    # return CriteriaExtractionResponse(**criteria_dict)
+    return CriteriaExtractionResponse(**criteria_dict)
 
-    return criteria_dict
+    # return criteria_dict
     
 
 class ResumeScoringRequest(BaseModel):
@@ -118,9 +118,7 @@ class ResumeScoringRequest(BaseModel):
 
 @app.post("/score-resumes", summary="Score Resumes",
           description="Scores multiple resumes based on provided criteria and returns scores in a CSV format.")
-async def score_resumes(criteria: str, files: List[UploadFile] = File(...)) -> StreamingResponse:
-# async def score_resumes(session_id: str, files: List[UploadFile] = File(...)) -> StreamingResponse:
-# async def score_resumes(ResumeScoringRequest) -> StreamingResponse:
+async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(...)) -> StreamingResponse:
   """This endpoint scores uploaded resumes based on the provided job criteria using OpenAI's LLM.
 
   Args:
@@ -129,13 +127,16 @@ async def score_resumes(criteria: str, files: List[UploadFile] = File(...)) -> S
   Returns:
       StreamingResponse: A CSV file containing the scores for each candidate.
   """
-  # if session_id not in criteria_storage:
-  #     raise HTTPException(status_code=404, detail="Session ID not found")
-  # criteria = criteria_storage[session_id]
   
-  results = []
+  try:
+    criteria_json = json.loads(criteria)
+    criteria = CriteriaExtractionResponse(**criteria_json)
+  except json.JSONDecodeError:
+    raise HTTPException(status_code=400, detail="Invalid JSON format")
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=str(e))
 
-  criteria = CriteriaExtractionResponse.parse_raw(criteria)
+  results = []
 
   for file in files:
     temp_file_path = f"temp/{file.filename}"
@@ -148,7 +149,7 @@ async def score_resumes(criteria: str, files: List[UploadFile] = File(...)) -> S
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are an experienced Hiring Manager. Score the relevance of the resume text to the following set of criterias. The value for each of the criteria should be between 0-5.Keep Track the name for each of the candidates, don't add any explanation, just the value."},
+            {"role": "system", "content": "You are an experienced Hiring Manager.Match the text against the provided criteria and score based on the presence and relevance of each of the criteria. The value for each of the criteria should be between 0-5. Keep Track of the name for each of the candidates, don't add any explanation, just the value."},
             {"role": "user", "content": str(criteria)},
             {"role": "user", "content": extracted_text}
         ],
@@ -181,7 +182,7 @@ async def score_resumes(criteria: str, files: List[UploadFile] = File(...)) -> S
             }
           }
         },
-        temperature=0,
+        temperature=0.5,
         max_completion_tokens=250,
         top_p=1,
         frequency_penalty=0,
@@ -209,6 +210,8 @@ async def score_resumes(criteria: str, files: List[UploadFile] = File(...)) -> S
 
   # Convert results to DataFrame
   df = pd.DataFrame(results)
+  df.name = df.name.apply(lambda x: x.title())
+  df = df.sort_values(by = ["total_scores"], ascending = False)
   
   # Create a CSV from the DataFrame
   stream = io.StringIO()
