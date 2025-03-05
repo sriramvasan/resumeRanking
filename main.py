@@ -11,6 +11,7 @@ from pydantic import BaseModel , validator
 from IPython.display import display , Markdown
 import pandas as pd
 import io
+import glob
 
 load_dotenv()
 
@@ -28,6 +29,27 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+def clear_tempfiles(directory:str)-> None:
+  """Deletes all the temporary files saved in the 
+  """
+  if not os.path.exists(directory):
+    print(f"Directory {directory} does not exist.")
+    return
+
+  files = glob.glob(os.path.join(directory, '*'))
+  for file in files:
+    try:
+      os.remove(file)
+      print(f"Deleted {file}")
+    except Exception as e:
+      print(f"Error deleting {file}: {str(e)}")
+
+async def save_tempfile(file: UploadFile):
+  if not os.path.exists("temp/"):
+      os.mkdir('temp/')
+  temp_file_path = f"temp/{file.filename}"
+  with open(temp_file_path, 'wb+') as f:
+    f.write(await file.read())
 
 def extract_text_from_file(file_path: str) -> str:
     """Extracts text from a given file."""
@@ -51,10 +73,9 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
     if not file.filename.endswith(('.pdf', '.docx')):
         raise HTTPException(status_code=400, detail="Unsupported file type")
     
-    # Save the file temporarily (could use a temp file as well)
+    # Save the file temporarily
     temp_file_path = f"temp/{file.filename}"
-    with open(temp_file_path, 'wb+') as f:
-        f.write(await file.read())
+    await save_tempfile(file)
 
     # Helps to extract text from the file
     extracted_text = extract_text_from_file(temp_file_path)
@@ -97,18 +118,10 @@ async def extract_criteria(file: UploadFile = File(...)) -> CriteriaExtractionRe
         )
     
     criteria = response.choices[0].message.content
-    criteria_dict = CriteriaExtractionResponse.parse_raw(criteria)
 
-
-    criteria_dict = json.loads(criteria)
-    
-    # session_id = uuid.uuid4().hex  # generate a unique session ID
-    # criteria_storage[session_id] = criteria_dict
-    # return {"session_id": session_id, "criteria": criteria_dict}
-
-    return CriteriaExtractionResponse(**criteria_dict)
-
-    # return criteria_dict
+    # deleting the temporarily saved file
+    clear_tempfiles('temp/')
+    return CriteriaExtractionResponse.parse_raw(criteria)
     
 
 class ResumeScoringRequest(BaseModel):
@@ -140,8 +153,7 @@ async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(.
 
   for file in files:
     temp_file_path = f"temp/{file.filename}"
-    with open(temp_file_path, 'wb+') as f:
-        f.write(await file.read())
+    await save_tempfile(file)
     
     extracted_text = extract_text_from_file(temp_file_path)
     
@@ -218,7 +230,7 @@ async def score_resumes(criteria: str = Form(), files: List[UploadFile] = File(.
   df.to_csv(stream, index=False)
   stream.seek(0)  # Go back to the start of the StringIO object
 
-  # Return StreamingResponse
+  clear_tempfiles('temp/')
   return StreamingResponse(stream, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=scores.csv"})
-  # return results
+
             
